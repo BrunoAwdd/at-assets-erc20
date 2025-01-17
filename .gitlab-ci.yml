@@ -1,0 +1,43 @@
+stages:
+  - deploy
+
+deploy_production:
+  stage: deploy
+  only:
+    - main  # Apenas na branch `main`
+  before_script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEPLOY_SERVER_IP >> ~/.ssh/known_hosts
+  script:
+    - echo "🚀 Deploy iniciado no servidor $DEPLOY_SERVER_IP"
+
+    # Conectar ao servidor e rodar o pull + build como usuário rails
+    - ssh $DEPLOY_USER@$DEPLOY_SERVER_IP << 'EOF'
+        set -e  # Faz o script parar imediatamente em caso de erro
+
+        # Executar tudo como usuário rails
+        sudo -u rails -i bash << 'RAILS_SCRIPT'
+          cd /home/rails
+
+          # Se a pasta não existir, clona apenas a pasta necessária
+          if [ ! -d "at-assets-erc20" ]; then
+            git clone --filter=blob:none --sparse git@gitlab.com:awdd1/at-assets-erc20.git at-assets-erc20
+            cd at-assets-erc20
+            git sparse-checkout init
+            git sparse-checkout set asset-token-interface
+          else
+            cd at-assets-erc20
+            git sparse-checkout set asset-token-interface
+            git pull origin main
+          fi
+
+          cd asset-token-interface
+          npm install --production
+          npm run build
+        RAILS_SCRIPT
+
+        # Após o build, reinicia o serviço como root
+        sudo systemctl restart nextjs
+      EOF
