@@ -4,41 +4,32 @@ stages:
 deploy_production:
   stage: deploy
   only:
-    - main # Apenas na branch `main`
+    - main # Executa apenas na branch `main`
   before_script:
-    - which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )
     - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H $DEPLOY_SERVER_IP >> ~/.ssh/known_hosts
   script:
-    - echo "🚀 Deploy iniciado no servidor $DEPLOY_SERVER_IP"
+    - echo "🚀 Iniciando deploy no servidor $DEPLOY_SERVER_IP"
 
-    # Conectar ao servidor e rodar o pull + build como usuário rails
-    - |
-      ssh $DEPLOY_USER@$DEPLOY_SERVER_IP << 'EOF'
-        set -e  # Faz o script parar imediatamente em caso de erro
+    # Enviar apenas a pasta asset-token-interface para o servidor
+    - rsync -avz --delete ./asset-token-interface/ rails@$DEPLOY_SERVER_IP:/home/rails/at-assets-erc20/
 
-        # Executar tudo como usuário rails
-        sudo -u rails -i bash << 'RAILS_SCRIPT'
-          cd /home/rails
+    # Acessar o servidor e rodar comandos de atualização
+    - >
+      ssh -i ~/.ssh/id_rsa rails@$DEPLOY_SERVER_IP << 'EOF'
+        set -e  # Para imediatamente em caso de erro
 
-          # Se a pasta não existir, clona apenas a pasta necessária
-          if [ ! -d "at-assets-erc20" ]; then
-            git clone --filter=blob:none --sparse git@gitlab.com:awdd1/at-assets-erc20.git at-assets-erc20
-            cd at-assets-erc20
-            git sparse-checkout init
-            git sparse-checkout set asset-token-interface
-          else
-            cd at-assets-erc20
-            git sparse-checkout set asset-token-interface
-            git pull origin main
-          fi
+        # Ir para a pasta de destino
+        cd /home/rails/at-assets-erc20/
 
-          cd asset-token-interface
-          npm install --production
-          npm run build
-        RAILS_SCRIPT
+        # Instalar dependências
+        npm install --production
 
-        # Após o build, reinicia o serviço como root
+        # Fazer build do projeto
+        npm run build
+
+        # Reiniciar o serviço Next.js
         sudo systemctl restart nextjs
       EOF
