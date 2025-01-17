@@ -4,9 +4,9 @@ stages:
 deploy_production:
   stage: deploy
   only:
-    - main  # Apenas na branch `main`
+    - main # Apenas na branch `main`
   before_script:
-    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - ssh-keyscan -H $DEPLOY_SERVER_IP >> ~/.ssh/known_hosts
@@ -14,7 +14,8 @@ deploy_production:
     - echo "🚀 Deploy iniciado no servidor $DEPLOY_SERVER_IP"
 
     # Conectar ao servidor e rodar o pull + build como usuário rails
-    - ssh $DEPLOY_USER@$DEPLOY_SERVER_IP << 'EOF'
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_SERVER_IP << 'EOF'
         set -e  # Faz o script parar imediatamente em caso de erro
 
         # Executar tudo como usuário rails
