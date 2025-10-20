@@ -16,13 +16,14 @@ export default async function ApproveNewUserPage({
   params: Promise<{ erc20Token: string }>;
 }) {
   const resolvedParams = await params;
+
   // 🔥 Verificação segura para evitar problemas com herança de protótipos
   if (
     !Object.prototype.hasOwnProperty.call(contracts, resolvedParams.erc20Token)
   ) {
     return (
       <div className="rounded-sm bg-white shadow-md dark:bg-slate-900 min-h-screen flex justify-center items-center">
-        <div className="bg-slate-900 p-6 rounded-lg shadow-lg text-center text-lg font-bold">
+        <div className="p-6 rounded-lg shadow-lg text-center text-lg font-bold">
           Invalid token!
         </div>
       </div>
