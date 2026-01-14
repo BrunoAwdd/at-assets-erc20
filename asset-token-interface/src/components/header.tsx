@@ -7,7 +7,7 @@ export default function Header() {
       <div className="container mx-auto flex justify-between items-center px-8 py-4">
         {/* Logotipo */}
         <img
-          src="https://atdb.io/storage/sites/2/2025/07/LogoAT-white.svg"
+          src="https://atdb.io/storage/sites/2/2026/01/logo-trust-site-2.svg"
           alt=""
           title="LogoAT-white"
           className="h-12 w-auto"
