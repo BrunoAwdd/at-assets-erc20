@@ -23,9 +23,19 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: {
       sepolia: process.env.ETHERSCAN_API_KEY || "",
-      bscTestnet: process.env.BNBSCAN_API_KEY || "",
-      bsc: process.env.BNBSCAN_API_KEY || "",
+      bscTestnet: process.env.ETHERSCAN_API_KEY || "",
+      bsc: process.env.ETHERSCAN_API_KEY || "",
     },
+    customChains: [
+      {
+        network: "bsc",
+        chainId: 56,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=56",
+          browserURL: "https://bscscan.com",
+        },
+      },
+    ],
   },
   paths: {
     tests: "./test",

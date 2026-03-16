@@ -26,13 +26,19 @@ export const contracts: Contracts = {
     bscTestnet: {
       address: deployedBscTestNetContracts["AltModule#Alt"],
       abi: bscTestNetAbi.abi as Abi,
-    } /*
-  bscTestnet: {
-    address: deployedBscTestNetContracts["AssetModule#Asset"],
-    abi: bscMainNetAbi2.abi,
-  },*/,
+    },
     bsc: {
       address: deployedBscMainNetContracts["AltModule#Alt"],
+      abi: bscMainNetAbi.abi as Abi,
+    },
+  },
+  alt1: {
+    bscTestnet: {
+      address: deployedBscTestNetContracts["Alt1Module#Alt1"],
+      abi: bscTestNetAbi.abi as Abi,
+    },
+    bsc: {
+      address: deployedBscMainNetContracts["Alt1Module#Alt1"],
       abi: bscMainNetAbi.abi as Abi,
     },
   },
