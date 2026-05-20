@@ -3,8 +3,8 @@ import ClearingHouseClient from "./client";
 import { contracts } from "@/app/contracts";
 
 export const metadata: Metadata = {
-  title: "ATL-CH",
-  description: "ATL-CH",
+  title: "ALT-CH",
+  description: "ALT-CH",
 };
 
 export default function ClearingHousePage() {

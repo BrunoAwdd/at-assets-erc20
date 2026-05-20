@@ -235,7 +235,7 @@ export default function ClearingHouseClient({
       return;
     }
     if (!tokenAddress || !clearingHouseAddress) {
-      setErrorMessage("ATL-CH address is not configured.");
+      setErrorMessage("ALT-CH address is not configured.");
       return;
     }
     if (!isAddress(beneficiary)) {
@@ -338,7 +338,7 @@ export default function ClearingHouseClient({
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-col gap-3 border-b border-gray-800 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">ATL-CH</h1>
+            <h1 className="text-2xl font-semibold">ALT-CH</h1>
             <p className="mt-1 text-sm text-gray-400">
               {tokenName && tokenSymbol
                 ? `${tokenName} (${tokenSymbol})`
@@ -367,7 +367,7 @@ export default function ClearingHouseClient({
 
         {!isConfigured && (
           <Alert tone="warn">
-            ATL-CH or ALTW address is missing in contracts.ts for this network.
+            ALT-CH or ALTW address is missing in contracts.ts for this network.
           </Alert>
         )}
 
