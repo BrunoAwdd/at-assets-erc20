@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { contracts } from "@/app/contracts";
 import Client from "./client";
+import SALTUserClient from "./salt-user-client";
 
 export const metadata: Metadata = {
   title: "Token",
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
 // 15 minutes
 export const revalidate = 900;
 
+const ERC1400_TOKENS = new Set(["salt", "salt1", "saltt"]);
+
 export default async function ApproveNewUserPage({
   params,
 }: {
@@ -17,7 +20,6 @@ export default async function ApproveNewUserPage({
 }) {
   const resolvedParams = await params;
 
-  // 🔥 Verificação segura para evitar problemas com herança de protótipos
   if (
     !Object.prototype.hasOwnProperty.call(contracts, resolvedParams.erc20Token)
   ) {
@@ -31,6 +33,10 @@ export default async function ApproveNewUserPage({
   }
 
   const contract = contracts[resolvedParams.erc20Token];
+
+  if (ERC1400_TOKENS.has(resolvedParams.erc20Token)) {
+    return <SALTUserClient contracts={contract} />;
+  }
 
   return (
     <div className="rounded-sm bg-white shadow-md dark:bg-slate-900">

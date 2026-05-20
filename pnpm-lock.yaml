@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@tokenysolutions/t-rex':
+        specifier: ^4.1.6
+        version: 4.1.6
     devDependencies:
       '@nomicfoundation/hardhat-chai-matchers':
         specifier: ^2.0.0
@@ -448,6 +452,9 @@ packages:
 
   '@solidity-parser/parser@0.19.0':
     resolution: {integrity: sha512-RV16k/qIxW/wWc+mLzV3ARyKUaMUTBy9tOLMzFhtNSKYeTAanQ3a5MudJKf/8arIFnA2L27SNjarQKmFg0w/jA==}
+
+  '@tokenysolutions/t-rex@4.1.6':
+    resolution: {integrity: sha512-GNmVAC11cqwF6bmVCl0yhaVfPLBptF4K0vmepghTPbSogky1WG+38h7RR/p7909Si2JgswreeeLZZyBLN0KZrg==}
 
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
@@ -2698,6 +2705,8 @@ snapshots:
       antlr4ts: 0.5.0-alpha.4
 
   '@solidity-parser/parser@0.19.0': {}
+
+  '@tokenysolutions/t-rex@4.1.6': {}
 
   '@tsconfig/node10@1.0.11': {}
 
