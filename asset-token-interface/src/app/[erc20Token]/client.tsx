@@ -1,20 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   useAccount,
   useWalletClient,
   useReadContracts,
   useChainId,
 } from "wagmi";
-import { BaseError, parseUnits } from "viem";
+import { BaseError, formatUnits, isAddress, parseUnits } from "viem";
 import { Token } from "../contracts";
 
-const formattedNumber = (number: number) =>
+const formattedNumber = (number: bigint, decimals = 0) =>
   new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(number));
+    maximumFractionDigits: decimals === 0 ? 0 : 6,
+  }).format(Number(formatUnits(number, decimals)));
 
 export default function Client({ contracts }: { contracts: Token }) {
   const chainId = useChainId();
@@ -22,8 +21,9 @@ export default function Client({ contracts }: { contracts: Token }) {
   const { data: walletClient } = useWalletClient();
 
   const [recipient, setRecipient] = useState<string>("");
-  const [amount, setAmount] = useState<number>(0);
+  const [amount, setAmount] = useState<string>("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const networkKey =
     chainId === 56 ? "bsc" : chainId === 97 ? "bscTestnet" : "bscTestnet";
@@ -46,6 +46,11 @@ export default function Client({ contracts }: { contracts: Token }) {
         address: networkData?.address as `0x${string}`,
         abi: networkData?.abi,
         functionName: "totalSupply",
+      },
+      {
+        address: networkData?.address as `0x${string}`,
+        abi: networkData?.abi,
+        functionName: "decimals",
       },
       {
         address: networkData?.address as `0x${string}`,
@@ -74,53 +79,74 @@ export default function Client({ contracts }: { contracts: Token }) {
       </div>
     );
 
-  const [name, symbol, totalSupply, balanceOf] = data;
+  const [name, symbol, totalSupply, decimalsResult, balanceOf] = data;
 
   const balance = balanceOf?.result as bigint;
   const supply = totalSupply?.result as bigint;
+  const decimals = (decimalsResult?.result as number | undefined) ?? 0;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/,/g, "");
-    const parsedValue = Number(rawValue);
+    const rawValue = e.target.value.replace(/,/g, "").trim();
+    setAmount(rawValue);
 
-    if (!isNaN(parsedValue)) {
-      if (parsedValue > balance) {
+    try {
+      const parsedAmount = parseUnits(rawValue || "0", decimals);
+      if (parsedAmount > balance) {
         setFormError("Value exceeds available balance.");
-        setAmount(parsedValue);
       } else {
         setFormError(null);
-        setAmount(parsedValue);
       }
+    } catch {
+      setFormError("Invalid amount.");
     }
   };
 
   const handleMax = () => {
-    setAmount(Number(balance));
+    setAmount(formatUnits(balance, decimals));
+    setFormError(null);
   };
 
-  const handleTransfer = async () => {
+  const handleTransfer = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTxStatus(null);
+
     if (!walletClient) {
       alert("Address not found");
       return;
     }
 
-    if (networkData === null) {
+    if (networkData === null || !isAddress(networkData.address)) {
       alert("Network not found");
       return;
     }
 
+    if (!isAddress(recipient)) {
+      setFormError("Invalid recipient address.");
+      return;
+    }
+
     try {
+      const parsedAmount = parseUnits(amount || "0", decimals);
+      if (parsedAmount <= 0n) {
+        setFormError("Amount must be greater than zero.");
+        return;
+      }
+
       const tx = await walletClient.writeContract({
         address: networkData?.address as `0x${string}`,
         abi: networkData?.abi,
         functionName: "transfer",
-        args: [recipient, parseUnits(amount.toString(), 0)],
+        args: [recipient, parsedAmount],
       });
       console.log("Transaction has been sent:", tx);
-      alert("Transaction has been sent successfully.");
+      setTxStatus("Transaction has been sent successfully.");
     } catch (error) {
       console.error("Error while processing the transfer:", error);
-      alert("Error while processing the transfer.");
+      setTxStatus(
+        error instanceof BaseError
+          ? error.shortMessage
+          : "Error while processing the transfer.",
+      );
     }
   };
 
@@ -140,7 +166,7 @@ export default function Client({ contracts }: { contracts: Token }) {
 
           <div>
             <p className="text-md font-bold text-gray-300">Total Supply</p>
-            <p className="text-lg">{formattedNumber(Number(supply))}</p>
+            <p className="text-lg">{formattedNumber(supply, decimals)}</p>
           </div>
         </div>
 
@@ -174,7 +200,7 @@ export default function Client({ contracts }: { contracts: Token }) {
                 id="amount"
                 type="text"
                 placeholder="0"
-                value={new Intl.NumberFormat("en-US").format(amount)}
+                value={amount}
                 onChange={handleChange}
                 className={`w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 ${
                   formError
@@ -196,10 +222,12 @@ export default function Client({ contracts }: { contracts: Token }) {
             )}
             <p className="text-sm text-gray-400 mt-1">{`Available Balance: ${
               address
-                ? formattedNumber(Number(balance))
+                ? formattedNumber(balance, decimals)
                 : "Wallet not connected"
             }`}</p>
           </div>
+
+          {txStatus && <p className="text-sm text-gray-300">{txStatus}</p>}
 
           {/* Botão de Transferência */}
           <button
