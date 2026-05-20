@@ -45,6 +45,28 @@ type Position = readonly [
   released: boolean,
 ];
 
+type PositionRow = {
+  id: bigint;
+  position: Position;
+  isMine: boolean;
+  role: "Depositor" | "Beneficiary" | "Other";
+};
+
+const formatUnlockAt = (value: bigint | undefined) => {
+  if (value === undefined) return "-";
+  return new Date(Number(value) * 1000).toLocaleString();
+};
+
+const getPositionStatus = (position: Position | undefined, chainNow: Date | null) => {
+  if (!position) return "-";
+  if (position[4]) return "Released";
+
+  const nowSeconds = BigInt(
+    Math.floor((chainNow?.getTime() ?? Date.now()) / 1000)
+  );
+  return position[3] <= nowSeconds ? "Mature" : "Locked";
+};
+
 export default function ClearingHouseClient({
   clearingHouseContracts,
   tokenContracts,
@@ -60,7 +82,6 @@ export default function ClearingHouseClient({
   const [beneficiary, setBeneficiary] = useState("");
   const [amount, setAmount] = useState("");
   const [unlockAt, setUnlockAt] = useState(defaultUnlockAt);
-  const [positionLookup, setPositionLookup] = useState("1");
   const [selectedPositionId, setSelectedPositionId] = useState<bigint | undefined>(
     1n,
   );
@@ -80,13 +101,6 @@ export default function ClearingHouseClient({
   const clearingHouseAddress = isAddress(clearingHouseData.address)
     ? (clearingHouseData.address as `0x${string}`)
     : undefined;
-
-  const inputPositionId = useMemo(() => {
-    const trimmed = positionLookup.trim();
-    if (!/^\d+$/.test(trimmed)) return undefined;
-    const parsed = BigInt(trimmed);
-    return parsed > 0n ? parsed : undefined;
-  }, [positionLookup]);
 
   const readsEnabled = Boolean(address && tokenAddress && clearingHouseAddress);
   const {
@@ -181,10 +195,73 @@ export default function ClearingHouseClient({
   const nextPositionId = baseData?.[7]?.result as bigint | undefined;
   const lockedInMyFavor = baseData?.[8]?.result as bigint | undefined;
   const position = positionData?.[0]?.result as Position | undefined;
+
+  const visiblePositionIds = useMemo(() => {
+    if (nextPositionId === undefined || nextPositionId <= 1n) return [];
+
+    const lastPositionId = nextPositionId - 1n;
+    const maxPositions = 25n;
+    const firstPositionId =
+      lastPositionId > maxPositions ? lastPositionId - maxPositions + 1n : 1n;
+    const ids: bigint[] = [];
+
+    for (let id = lastPositionId; id >= firstPositionId; id -= 1n) {
+      ids.push(id);
+    }
+
+    return ids;
+  }, [nextPositionId]);
+
+  const {
+    data: positionListData,
+    error: positionListError,
+    refetch: refetchPositionList,
+  } = useReadContracts({
+    contracts:
+      readsEnabled && visiblePositionIds.length > 0
+        ? visiblePositionIds.map((positionId) => ({
+            address: clearingHouseAddress,
+            abi: clearingHouseData.abi,
+            functionName: "getPosition",
+            args: [positionId],
+          }))
+        : [],
+    query: {
+      enabled: readsEnabled && visiblePositionIds.length > 0,
+    },
+  });
+
   const isTrustee =
     Boolean(address && trusteeOwner) &&
     address?.toLowerCase() === trusteeOwner?.toLowerCase();
   const isConfigured = Boolean(tokenAddress && clearingHouseAddress);
+  const positionRows = useMemo(() => {
+    const connectedAddress = address?.toLowerCase();
+
+    return visiblePositionIds
+      .map((positionId, index) => {
+        const rowPosition = positionListData?.[index]?.result as
+          | Position
+          | undefined;
+        if (!rowPosition) return undefined;
+
+        const isDepositor = connectedAddress === rowPosition[0].toLowerCase();
+        const isBeneficiary = connectedAddress === rowPosition[1].toLowerCase();
+
+        return {
+          id: positionId,
+          position: rowPosition,
+          isMine: Boolean(isDepositor || isBeneficiary),
+          role: isDepositor
+            ? "Depositor"
+            : isBeneficiary
+              ? "Beneficiary"
+              : "Other",
+        };
+      })
+      .filter((row): row is PositionRow => Boolean(row))
+      .sort((left, right) => Number(right.isMine) - Number(left.isMine));
+  }, [address, positionListData, visiblePositionIds]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setLocalNow(new Date()), 1000);
@@ -224,6 +301,7 @@ export default function ClearingHouseClient({
   const refresh = async () => {
     await refetchBase();
     await refetchPosition();
+    await refetchPositionList();
   };
 
   const handleDeposit = async () => {
@@ -328,10 +406,7 @@ export default function ClearingHouseClient({
     }
   };
 
-  const positionUnlockAt =
-    position !== undefined
-      ? new Date(Number(position[3]) * 1000).toLocaleString()
-      : "-";
+  const positionUnlockAt = formatUnlockAt(position?.[3]);
 
   return (
     <main className="min-h-screen bg-gray-950 px-4 pb-10 pt-28 text-white">
@@ -379,96 +454,129 @@ export default function ClearingHouseClient({
             {(positionError as BaseError).shortMessage || positionError.message}
           </Alert>
         )}
+        {positionListError && (
+          <Alert tone="warn">
+            {(positionListError as BaseError).shortMessage ||
+              positionListError.message}
+          </Alert>
+        )}
         {errorMessage && <Alert>{errorMessage}</Alert>}
         {status && <Alert tone="success">{status}</Alert>}
 
-        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
-          <section className="rounded-lg border border-gray-800 bg-gray-900 p-5">
-            <SectionTitle title="Deposit" />
-            <div className="grid gap-4">
-              <Field label="Beneficiary">
-                <input
-                  value={beneficiary}
-                  onChange={(event) => setBeneficiary(event.target.value)}
-                  placeholder="0x..."
-                  className="input"
-                />
-              </Field>
-              <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
-                <Field label="Amount">
+        <div
+          className={`grid gap-5 ${
+            isTrustee ? "lg:grid-cols-[1fr_1fr]" : "lg:grid-cols-1"
+          }`}
+        >
+          {isTrustee && (
+            <section className="rounded-lg border border-gray-800 bg-gray-900 p-5">
+              <SectionTitle title="Deposit" />
+              <div className="grid gap-4">
+                <Field label="Beneficiary">
                   <input
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
-                    placeholder="0"
-                    inputMode="decimal"
+                    value={beneficiary}
+                    onChange={(event) => setBeneficiary(event.target.value)}
+                    placeholder="0x..."
                     className="input"
                   />
                 </Field>
-                <Field label="Available">
-                  <div className="metric-box">
-                    {formatNumber(balance, decimals)}
-                  </div>
-                </Field>
-              </div>
-              <div className="grid gap-4 md:grid-cols-[1fr_260px]">
-                <Field label="Unlock At">
-                  <input
-                    value={unlockAt}
-                    onChange={(event) => setUnlockAt(event.target.value)}
-                    type="datetime-local"
-                    className="input"
-                  />
-                </Field>
-                <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
-                  <div className="mb-2 text-xs font-medium text-gray-400">
-                    Clock
-                  </div>
-                  <div className="grid gap-1">
-                    <ClockRow label="Local" value={localNow} />
-                    <ClockRow label="Chain" value={chainNow} />
+                <div className="grid gap-4 sm:grid-cols-[1fr_180px]">
+                  <Field label="Amount">
+                    <input
+                      value={amount}
+                      onChange={(event) => setAmount(event.target.value)}
+                      placeholder="0"
+                      inputMode="decimal"
+                      className="input"
+                    />
+                  </Field>
+                  <Field label="Available">
+                    <div className="metric-box">
+                      {formatNumber(balance, decimals)}
+                    </div>
+                  </Field>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[1fr_260px]">
+                  <Field label="Unlock At">
+                    <input
+                      value={unlockAt}
+                      onChange={(event) => setUnlockAt(event.target.value)}
+                      type="datetime-local"
+                      className="input"
+                    />
+                  </Field>
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                    <div className="mb-2 text-xs font-medium text-gray-400">
+                      Clock
+                    </div>
+                    <div className="grid gap-1">
+                      <ClockRow label="Local" value={localNow} />
+                      <ClockRow label="Chain" value={chainNow} />
+                    </div>
                   </div>
                 </div>
+                <button
+                  onClick={handleDeposit}
+                  disabled={!address || !isConfigured || isSubmitting}
+                  className="button-primary"
+                >
+                  Approve and Deposit
+                </button>
               </div>
-              <button
-                onClick={handleDeposit}
-                disabled={!address || !isConfigured || isSubmitting}
-                className="button-primary"
-              >
-                Approve and Deposit
-              </button>
-            </div>
-          </section>
+            </section>
+          )}
 
           <section className="rounded-lg border border-gray-800 bg-gray-900 p-5">
-            <SectionTitle title="Position" />
+            <SectionTitle title="Positions" />
             <div className="grid gap-4">
-              <Field label="Position ID">
-                <div className="flex gap-2">
-                  <input
-                    value={positionLookup}
-                    onChange={(event) => setPositionLookup(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && inputPositionId !== undefined) {
-                        setSelectedPositionId(inputPositionId);
-                      }
-                    }}
-                    inputMode="numeric"
-                    className="input"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (inputPositionId !== undefined) {
-                        setSelectedPositionId(inputPositionId);
-                      }
-                    }}
-                    disabled={!isConfigured || inputPositionId === undefined}
-                    className="button-secondary max-w-28"
-                  >
-                    Search
-                  </button>
-                </div>
-              </Field>
+              <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+                {positionRows.length > 0 ? (
+                  positionRows.map((row) => {
+                    const selected = selectedPositionId === row.id;
+                    const statusLabel = getPositionStatus(row.position, chainNow);
+
+                    return (
+                      <button
+                        key={row.id.toString()}
+                        type="button"
+                        onClick={() => setSelectedPositionId(row.id)}
+                        className={`rounded-lg border p-3 text-left transition ${
+                          selected
+                            ? "border-red-500 bg-red-950/40"
+                            : "border-gray-800 bg-gray-950 hover:border-gray-600"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold text-gray-100">
+                            #{row.id.toString()}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-medium ${
+                              row.position[4]
+                                ? "bg-gray-800 text-gray-300"
+                                : statusLabel === "Mature"
+                                  ? "bg-emerald-950 text-emerald-300"
+                                  : "bg-amber-950 text-amber-300"
+                            }`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-xs text-gray-400 sm:grid-cols-4">
+                          <span>{row.role}</span>
+                          <span>{formatNumber(row.position[2], decimals)}</span>
+                          <span>{formatAddress(row.position[1])}</span>
+                          <span>{formatUnlockAt(row.position[3])}</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4 text-sm text-gray-400">
+                    No positions
+                  </div>
+                )}
+              </div>
 
               <div className="grid gap-2 rounded-lg border border-gray-800 bg-gray-950 p-4">
                 <Info label="Depositor" value={formatAddress(position?.[0])} />
@@ -480,9 +588,7 @@ export default function ClearingHouseClient({
                 <Info label="Unlock At" value={positionUnlockAt} />
                 <Info
                   label="Status"
-                  value={
-                    position?.[4] ? "Released" : position ? "Locked" : "-"
-                  }
+                  value={getPositionStatus(position, chainNow)}
                 />
               </div>
 
